@@ -32,7 +32,7 @@ def SongBeat(songPath):
     #TODO first convert .m4a to mp3 and then to .wav? this is too expensive change later
     mp3Path = ConvertM4AtoMP3(songPath)
     audio, sr = librosa.load(mp3Path, sr=None)
-    wavPath = '/Users/ivanherrera/Movies/bachata_tutorials/temp_audio.wav'
+    # wavPath = PathWereToSaveIt
     sf.write(wavPath, audio, sr)
     audio, sr = librosa.load(wavPath, sr=None)
     tempo, beats = librosa.beat.beat_track(y=audio, sr=sr)
@@ -51,8 +51,8 @@ def CrossfadeSongs(lhsSong, rhsSong, fadeDurationSec=10):
 
 if __name__ == "__main__":
     
-    audio1path = "/Users/ivanherrera/Music/Bachata/moderna_sensual/105MBP/01 La Curiosidad (Bachata Version).m4a"
-    audio2path = "/Users/ivanherrera/Movies/toworkon/songs/Antonio José - La Noche Perfecta.mp3"
+    #audio1path = Path
+    #audio2path = Path
     SongBeat(audio1path)
     SongBeat(audio2path)
     CrossfadeSongs(audio1path,audio2path)
