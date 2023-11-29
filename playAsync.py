@@ -8,6 +8,10 @@ import asyncio
 import librosa
 import tempfile
 import soundfile as sf
+import json
+
+songBeatsFile = "songBeats.json"
+
 
 def CalculateBeats(mp3Path):
     audio, sr = librosa.load(mp3Path, sr=None)
@@ -18,6 +22,7 @@ def CalculateBeats(mp3Path):
 
     return tempo
 
+# get a lenth multiple of 2 
 def GetModLength(iterable):
     modLength = len(iterable)
     if (modLength % 2 == 0):
@@ -53,7 +58,26 @@ def ListFilesInFolderRecursively(folderPath):
         return fileList
     except Exception as e:
         return f"An error occurred: {e}"  
+
+def GetSongData(filename=songBeatsFile):
+    try:
+        with open(filename, "r") as file:
+            return json.load(file)
+    except FileNotFoundError:
+        return {}
+
+def SaveToJson(songData, filename=songBeatsFile):
+    try:
+        with open(filename, "r") as file:
+            data = json.load(file)
+    except FileNotFoundError:
+        data = {}
+
+    data.update(songData)
     
+    with open(filename, "w") as file:
+        json.dump(data, file, indent=4)
+
 def DetectSilencePortionsOfSong(song):
     #song = AudioSegment.from_file(songPath)
     # Define silence threshold (in dBFS)
@@ -84,22 +108,32 @@ def DetectSilencePortionsOfSong(song):
 async def PlaySongAsync(audio):
     await asyncio.to_thread(play, audio)
 
+
+
 async def main():
     #songBeat = "/Users/ivanherrera/Music/Bachata/moderna_sensual/05 Aventura - Dile al Amor.mp3"
     #CalculateBeats(songBeat)
     folderPath = "/Users/ivanherrera/Music/Bachata/moderna_sensual/"
     songPaths = ListFilesInFolderRecursively(folderPath)
-
+    songData = GetSongData()
 
     #listOfSongs = ListFilesInFolder(folderPath)
 
-    songFilePathBeat = {}
-    for singleSongPath in songPaths:
-        if not singleSongPath.endswith(".mp3"):
+    for song in songPaths:
+        if not song.endswith(".mp3"):
             continue 
-        songFilePathBeat[singleSongPath] = round(CalculateBeats(singleSongPath))
+        if song not in songData:
+            beats = round(CalculateBeats(song))
+            songData[song] = beats
 
-    sortedSongPathBeat = dict(sorted(songFilePathBeat.items(), key=lambda item: item[1], reverse=False))
+    SaveToJson(songData)
+    # songFilePathBeat = {}
+    # for singleSongPath in songPaths:
+    #     if not singleSongPath.endswith(".mp3"):
+    #         continue 
+    #     songFilePathBeat[singleSongPath] = round(CalculateBeats(singleSongPath))
+
+    sortedSongPathBeat = dict(sorted(songData.items(), key=lambda item: item[1], reverse=False))
     sortedSongs = list(sortedSongPathBeat.keys())
 
     leftDeckTask = None
