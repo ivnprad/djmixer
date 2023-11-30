@@ -9,10 +9,15 @@ import librosa
 import tempfile
 import soundfile as sf
 import json
+import tkinter as tk
+from tkinter import filedialog
+
+#TODO fade in - fade out
+#TODO Time-Stretching the Songs Overlapping and Mixing the Songs
 
 songBeatsFile = "songBeats.json"
 
-
+# Calculate beats 
 def CalculateBeats(mp3Path):
     audio, sr = librosa.load(mp3Path, sr=None)
 
@@ -22,7 +27,7 @@ def CalculateBeats(mp3Path):
 
     return tempo
 
-# get a lenth multiple of 2 
+# Get a lenth multiple of 2 
 def GetModLength(iterable):
     modLength = len(iterable)
     if (modLength % 2 == 0):
@@ -30,6 +35,7 @@ def GetModLength(iterable):
     else:
         return modLength-1
 
+# Convert File to mp3
 def GetMP3FromFile(filePath):
     root, extension = os.path.splitext(filePath)
 
@@ -44,7 +50,8 @@ def GetMP3FromFile(filePath):
         return outputFile
     else:
         return None
-    
+
+# List Files in folder recursively    
 def ListFilesInFolderRecursively(folderPath):
     try:
         fileList = []
@@ -59,6 +66,7 @@ def ListFilesInFolderRecursively(folderPath):
     except Exception as e:
         return f"An error occurred: {e}"  
 
+# Load json data and get dict of song file paths with betas 
 def GetSongData(filename=songBeatsFile):
     try:
         with open(filename, "r") as file:
@@ -66,6 +74,7 @@ def GetSongData(filename=songBeatsFile):
     except FileNotFoundError:
         return {}
 
+# Update Json Data and save it 
 def SaveToJson(songData, filename=songBeatsFile):
     try:
         with open(filename, "r") as file:
@@ -78,6 +87,7 @@ def SaveToJson(songData, filename=songBeatsFile):
     with open(filename, "w") as file:
         json.dump(data, file, indent=4)
 
+# Detect silecente portions of with threshold of -35
 def DetectSilencePortionsOfSong(song):
     #song = AudioSegment.from_file(songPath)
     # Define silence threshold (in dBFS)
@@ -104,21 +114,32 @@ def DetectSilencePortionsOfSong(song):
     songDuration = duration_ms/1000
 
     return start,end,toEnd, songDuration
-        
+
+def SelecDirectory():
+    # Create a root window
+    root = tk.Tk()
+    root.withdraw()  # Hide the root window
+
+    # Open the file selection dialog
+    dirPath = filedialog.askdirectory()
+
+    # Print the selected file path
+    print(f"Selected directory: {dirPath}")
+
+    # Close the root window
+    root.destroy()
+
 async def PlaySongAsync(audio):
     await asyncio.to_thread(play, audio)
 
 
-
 async def main():
-    #songBeat = "/Users/ivanherrera/Music/Bachata/moderna_sensual/05 Aventura - Dile al Amor.mp3"
-    #CalculateBeats(songBeat)
-    folderPath = "/Users/ivanherrera/Music/Bachata/moderna_sensual/"
+
+    folderPath = SelecDirectory()
     songPaths = ListFilesInFolderRecursively(folderPath)
     songData = GetSongData()
 
-    #listOfSongs = ListFilesInFolder(folderPath)
-
+    # For song list in the give directory tha end with .mp3 and are not in songData calculate Beats
     for song in songPaths:
         if not song.endswith(".mp3"):
             continue 
@@ -126,12 +147,7 @@ async def main():
             beats = round(CalculateBeats(song))
             songData[song] = beats
 
-    SaveToJson(songData)
-    # songFilePathBeat = {}
-    # for singleSongPath in songPaths:
-    #     if not singleSongPath.endswith(".mp3"):
-    #         continue 
-    #     songFilePathBeat[singleSongPath] = round(CalculateBeats(singleSongPath))
+    SaveToJson(songData) # update list to json
 
     sortedSongPathBeat = dict(sorted(songData.items(), key=lambda item: item[1], reverse=False))
     sortedSongs = list(sortedSongPathBeat.keys())
@@ -146,7 +162,7 @@ async def main():
     try:
         songsList = sortedSongs
         for iter in range(0, GetModLength(songsList), iterationStep):
-            if iter==len(songsList) or iter+1==len(songsList) or iter+2==len(songsList):
+            if iter==len(songsList) or iter+1==len(songsList) or iter+2==len(songsList): #for the fade-in fade-out we need to get the next 3 sogns
                 break
 
             leftSongPath = songsList[iter]
@@ -164,13 +180,14 @@ async def main():
             print(rightSongPath)
             print(f" Right song. Start {rightStart} End {rightEnd} toEnd {rightToEnd} duration {rightDeckSongDuration}")
 
+            # The overlapping should occur cutting the silence of the first song and the silence of the rightDeckson
             leftCrossfade = leftToEnd+rightStart # 10 seconds default, end silence of this song + start silence of the next song 
             print(f"leftCrossfade {leftCrossfade} seconds ")
             leftDelay = leftDeckSongDuration-leftCrossfade
             leftDeckTask = asyncio.create_task(PlaySongAsync(leftDeckSong))
-            if rightDeckTask:
+            if rightDeckTask: # If right deck keeps playing let it play
                 await rightDeckTask
-            await asyncio.sleep(leftDelay-rightCrossfade)
+            await asyncio.sleep(leftDelay-rightCrossfade) # TODO recalculate this in cycle
 
             # just tentative 
             nextSongPath = songsList[iter+2]
@@ -183,7 +200,7 @@ async def main():
             rightDeckTask = asyncio.create_task(PlaySongAsync(rightDeckSong))
             if leftDeckTask:
                 await leftDeckTask
-            await asyncio.sleep(rightDelay-leftCrossfade)
+            await asyncio.sleep(rightDelay-leftCrossfade)# TODO recalculate this 
 
         for task in Tasks:
             if task is not None:
