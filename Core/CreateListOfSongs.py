@@ -3,7 +3,7 @@ from FileHandling import DeleteFile, GetDirectory, SaveDirectory, ListFilesInFol
 from FileHandling import SaveToJson, songBeatsFile
 from Core.PatternGeneration import FirstGenerativePattern, Pattern
 from UI import SelecDirectory
-from AudioProcessing import ConvertM4AtoMp3, CalculateBeats
+from Core.AudioProcessing import ConvertM4AtoMp3, CalculateBeats
 
 def GetPreviousSessionSongs(jsonFile=currentSongFile):
     currentSongPath, resumePosition = GetCurrentSongAndPosition(currentSongFile)
@@ -20,6 +20,8 @@ def CreateNewListOfSongs():
 
     folderPath = GetDirectory()
     if folderPath is None:
+        # TODO replace this with ttink in the main GUI
+        raise ValueError("Do not use ttinker to ask for directory because it is being in the main")
         folderPath = SelecDirectory()
         SaveDirectory(folderPath)
     ConvertM4AtoMp3(folderPath)

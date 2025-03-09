@@ -1,0 +1,6 @@
+.DS_Store
+__pycache__/
+Logging/__pycache__
+*.log
+Core/__pycache__
+ConfigurationFiles
