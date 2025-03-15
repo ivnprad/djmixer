@@ -40,7 +40,7 @@ def Play(filePath, logUntilThisLimit,stopEvent,startPos=0):
             playObj.stop()
             break
     
-    print("playing done")
+    mainLogger.debug("playing done")
 
     return currentTime
 

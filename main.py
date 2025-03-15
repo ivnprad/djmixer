@@ -11,8 +11,7 @@ import time
 #TODO bug If songsplayed.json is too big creating a new list 
 
 def RunAsyncInThread(resume=None,stopEvent=None):
-    #asyncio.run(PlaySongs(resume,stopEvent))
-    asyncio.run(PlaySongs(resume))
+    asyncio.run(PlaySongs(resume,stopEvent))
 
 def main():
     parser = argparse.ArgumentParser(description="Process some parameters.")
@@ -20,16 +19,10 @@ def main():
     args = parser.parse_args()
 
     stopEvent = Event()
-    #asyncio.run(PlaySongs(args.resume))
-    # Start the asyncio function in a separate thread
-    #thread = threading.Thread(target=RunAsyncInThread, args=(args.resume,stopEvent))
-    thread = threading.Thread(target=RunAsyncInThread, args=(args.resume,))
+    thread = threading.Thread(target=RunAsyncInThread, args=(args.resume,stopEvent))
     thread.start()
-    # print("continue")
-    # time.sleep(20)
-    # print("System is doing other work")
-    # stopEvent.set()
-    # print("Cancel event set")
+    time.sleep(20)
+    stopEvent.set()
     thread.join()  
 
 if __name__ == "__main__":

@@ -6,13 +6,13 @@ from Utilities import GetModLength
 from Core.CreateListOfSongs import GetPreviousSessionSongs, CreateNewListOfSongs
 from Logging.MainLogger import mainLogger
 from threading import Event
+import time
 
 async def WaitForTasksToFinish(tasks):
     await asyncio.gather(*(task for task in tasks if task))
 
 async def PlaySongs(resume=None,stopEvent=None):
     mainLogger.info(" starting ")
-    stopEvent = Event()
     leftDeckTask = None
     rightDeckTask = None
     Tasks = [leftDeckTask,rightDeckTask]
@@ -32,7 +32,6 @@ async def PlaySongs(resume=None,stopEvent=None):
 
         for iter in range(0, GetModLength(songsList), iterationStep):
             if stopEvent.is_set():
-                print("Stopping please...")
                 break
             leftDeckIdx=iter
             rightDeckIdx=iter+1
@@ -47,9 +46,6 @@ async def PlaySongs(resume=None,stopEvent=None):
             UpdateJsonWithSong(leftSongPath)
             leftDelay = CalculateTransition(leftSongPath,rightSongPath)
             leftDeckTask = asyncio.create_task(PlayAsync(leftSongPath,leftDelay,stopEvent,resumePosition))
-
-            await asyncio.sleep(5)
-            stopEvent.set()
   
             if rightDeckTask: 
                 await rightDeckTask
@@ -57,23 +53,17 @@ async def PlaySongs(resume=None,stopEvent=None):
                 leftDelay-=resumePosition
                 resumePosition = 0
 
-            #await asyncio.sleep(leftDelay-rightCrossfade) 
-            await asyncio.sleep(5)
-            # sleep_task = asyncio.create_task(asyncio.sleep(leftDelay-rightCrossfade))
-            # cancel_task = asyncio.create_task(stopEvent.wait())
-            # done, pending = await asyncio.wait([sleep_task, cancel_task],return_when=asyncio.FIRST_COMPLETED)
-            # if sleep_task in done:
-            #     print("Sleep task completed")
-            # if cancel_task in done:
-            #     print("Cancel task triggered")
-            # for task in pending:
-            #     task.cancel()
-            #     try:
-            #         await task
-            #     except asyncio.CancelledError:
-            #         print("Cancelled pending task")
-    
+            start_time = time.perf_counter()
+            end_time = start_time
+            waitTime=leftDelay-rightCrossfade
+            while (end_time-start_time)<waitTime:
+                if stopEvent.is_set():
+                    break
+                await asyncio.sleep(0.1)
+                end_time = time.perf_counter()
 
+            if stopEvent.is_set():
+                break
             mainLogger.info("playing: " + rightSongPath.split('/')[-1])
             UpdateJsonWithSong(rightSongPath)
             rightDelay = CalculateTransition(rightSongPath,songsList[rightDeckOverlapIdx])
@@ -81,22 +71,15 @@ async def PlaySongs(resume=None,stopEvent=None):
 
             if leftDeckTask:
                 await leftDeckTask
-            #await asyncio.sleep(rightDelay-leftCrossfade)
-            await asyncio.sleep(5)
-            # sleep_task = asyncio.create_task(asyncio.sleep(rightDelay-leftCrossfade))
-            # cancel_task = asyncio.create_task(stopEvent.wait())
-            # done, pending = await asyncio.wait([sleep_task, cancel_task],return_when=asyncio.FIRST_COMPLETED)
-            # if sleep_task in done:
-            #     print("Sleep task completed")
-            # if cancel_task in done:
-            #     print("Cancel task triggered")
-            # for task in pending:
-            #     task.cancel()
-            #     try:
-            #         await task
-            #     except asyncio.CancelledError:
-            #         print("Cancelled pending task")
-        
+            start_time = time.perf_counter()
+            end_time = start_time
+            waitTime=rightDelay-leftCrossfade
+            while (end_time-start_time)<waitTime:
+                if stopEvent.is_set():
+                    break
+                await asyncio.sleep(0.1)
+                end_time = time.perf_counter()
+
         await WaitForTasksToFinish(Tasks)
 
     except Exception as e:
