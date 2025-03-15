@@ -1,13 +1,11 @@
-from PyQt6.QtWidgets import QApplication, QWidget, QPushButton, QVBoxLayout, QFileDialog
-from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput, QMediaFormat#, QMediaPlaylist, QMediaContent
+from PyQt6.QtWidgets import QApplication, QWidget, QPushButton, QVBoxLayout, QFileDialog,QMessageBox
+from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6.QtCore import QUrl
 
 import asyncio
 from Core.PlaySongs import PlaySongs
 import threading
-import argparse
 from threading import Event
-import time
 
 def RunAsyncInThread(resume=None,stopEvent=None):
     asyncio.run(PlaySongs(resume,stopEvent))
@@ -41,7 +39,7 @@ class AudioPlayer(QWidget):
         self.setWindowTitle('Simple Audio Player')
         self.setGeometry(300, 300, 300, 200)
 
-        self.stopEvent = Event()
+        self.stopPlayer = Event()
         self.playThread = None
         self.resume=None
 
@@ -54,15 +52,15 @@ class AudioPlayer(QWidget):
 
     def play_audio(self):
         #self.player.play()
-        self.stopEvent.clear()
-        self.playThread = threading.Thread(target=RunAsyncInThread, args=(self.resume,self.stopEvent))
+        self.stopPlayer.clear()
+        self.playThread = threading.Thread(target=RunAsyncInThread, args=(self.resume,self.stopPlayer))
         self.playThread.start()
         print("playing...")
 
     def pause_audio(self):
         print("pausing...")
         #self.player.pause()
-        self.stopEvent.set()
+        self.stopPlayer.set()
         self.playThread.join()
         self.playThread = None
         self.resume=True
@@ -71,11 +69,25 @@ class AudioPlayer(QWidget):
     def stop_audio(self):
         print("stopping...")
         #self.player.stop()
-        self.stopEvent.set()
+        self.stopPlayer.set()
         self.playThread.join()
         self.playThread = None
         self.resume=True
         print("stopped")
+
+    def closeEvent(self, event):
+        reply = QMessageBox.question(self, 'Message',
+            "Are you sure to quit?", QMessageBox.StandardButton.Yes |
+            QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
+
+        if reply == QMessageBox.StandardButton.Yes:
+            #self.player.stop()  # Stop the player
+            self.stopPlayer.set()
+            if self.playThread!=None:
+                self.playThread.join()
+            event.accept()
+        else:
+            event.ignore()  
 
 if __name__ == '__main__':
     app = QApplication([])
