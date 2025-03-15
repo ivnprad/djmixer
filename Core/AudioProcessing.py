@@ -16,7 +16,7 @@ from Logging.MainLogger import mainLogger
 silenceThresholdInDbfs= -35
 milisecondsToSeconds = 1/1000 
 
-def Play(filePath, logUntilThisLimit,startPos=0):
+def Play(filePath, logUntilThisLimit,stopEvent,startPos=0):
     # Load the file
     song = AudioSegment.from_file(filePath)
     secondsToMilisecondsFactor = 1000
@@ -36,11 +36,16 @@ def Play(filePath, logUntilThisLimit,startPos=0):
             mainLogger.debug(f"{filePath[-30:]} Current playback position: {currentTime:.2f} seconds")
             DeleteAndCreate(filePath,currentTime)
         time.sleep(0.5)
+        if stopEvent.is_set():
+            playObj.stop()
+            break
+    
+    print("playing done")
 
     return currentTime
 
-async def PlayAsync(filePath, logUntilThisLimit,startPos=0):
-    await to_thread(Play, filePath, logUntilThisLimit, startPos)
+async def PlayAsync(filePath, logUntilThisLimit,stopEvent,startPos=0):
+    await to_thread(Play, filePath, logUntilThisLimit, stopEvent,startPos)
 
 # Calculate beats 
 def CalculateBeats(mp3Path):

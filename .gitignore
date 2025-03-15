@@ -4,3 +4,4 @@ Logging/__pycache__
 *.log
 Core/__pycache__
 ConfigurationFiles
+*.log.*
