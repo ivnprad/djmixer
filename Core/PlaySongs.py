@@ -8,6 +8,15 @@ from Logging.MainLogger import mainLogger
 from threading import Event
 import time
 
+async def AwaitTimeoutOrEvent(stopEvent,timeout):
+    startTime = time.perf_counter()
+    endTime = startTime
+    while (endTime - startTime) < timeout:
+        if stopEvent.is_set():
+            break
+        await asyncio.sleep(0.1)
+        endTime = time.perf_counter()
+
 async def WaitForTasksToFinish(tasks):
     await asyncio.gather(*(task for task in tasks if task))
 
@@ -53,14 +62,7 @@ async def PlaySongs(resume=None,stopEvent=None):
                 leftDelay-=resumePosition
                 resumePosition = 0
 
-            start_time = time.perf_counter()
-            end_time = start_time
-            waitTime=leftDelay-rightCrossfade
-            while (end_time-start_time)<waitTime:
-                if stopEvent.is_set():
-                    break
-                await asyncio.sleep(0.1)
-                end_time = time.perf_counter()
+            await AwaitTimeoutOrEvent(stopEvent,leftDelay-rightCrossfade)
 
             if stopEvent.is_set():
                 break
@@ -71,14 +73,8 @@ async def PlaySongs(resume=None,stopEvent=None):
 
             if leftDeckTask:
                 await leftDeckTask
-            start_time = time.perf_counter()
-            end_time = start_time
-            waitTime=rightDelay-leftCrossfade
-            while (end_time-start_time)<waitTime:
-                if stopEvent.is_set():
-                    break
-                await asyncio.sleep(0.1)
-                end_time = time.perf_counter()
+
+            await AwaitTimeoutOrEvent(stopEvent,rightDelay-leftCrossfade)
 
         await WaitForTasksToFinish(Tasks)
 
