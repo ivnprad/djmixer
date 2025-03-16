@@ -49,7 +49,7 @@ def SaveToJson(songData, filename):
         raise
     
     with open(filename, "w") as file:
-        json.dump(data, file, indent=4)
+        json.dump(data, file, indent=4,ensure_ascii=False)
 
 # Delete and Create json file with current song and position
 def DeleteAndCreate(songPath, position, filename=currentSongFile):
