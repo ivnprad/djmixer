@@ -58,7 +58,7 @@ def DeleteAndCreate(songPath, position, filename=currentSongFile):
 
     try:
         with open(filename, "w") as file:
-            json.dump(songData, file, indent=4)
+            json.dump(songData, file, indent=4,ensure_ascii=False)
     except Exception as e:
         print(f"An error occurred: {e}")
         raise
