@@ -16,6 +16,15 @@ from Logging.MainLogger import mainLogger
 silenceThresholdInDbfs= -35
 milisecondsToSeconds = 1/1000 
 
+# def fade_out_and_stop(play_obj, fade_duration_ms,song,current_position):
+#     remaining_segment = song[current_position:]
+#     fade_out_segment = remaining_segment.fade_out(fade_duration_ms)
+#     play_obj.stop()
+#     raw_data = fade_out_segment.raw_data
+#     sample_rate = fade_out_segment.frame_rate
+#     num_channels = fade_out_segment.channels
+#     sa.play_buffer(raw_data, num_channels, 2, sample_rate).wait_done()
+
 def Play(filePath, logUntilThisLimit,stopEvent,startPos=0):
     # Load the file
     song = AudioSegment.from_file(filePath)
@@ -38,9 +47,11 @@ def Play(filePath, logUntilThisLimit,stopEvent,startPos=0):
         time.sleep(0.5)
         if stopEvent.is_set():
             playObj.stop()
+            #currentPosition=time.time() - startTime + startPos 
+            #fade_out_and_stop(playObj, 1000,song,currentPosition)
             break
     
-    mainLogger.debug("playing done")
+    mainLogger.debug(f" {filePath.split('/')[-1]} playing done.")
 
     return currentTime
 

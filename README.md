@@ -7,3 +7,4 @@ Here are some upcoming tasks we need to address:
 - [ ] use separate thread to analize songs who are new so it does not take too long to load 
 - [ ] bug If songsplayed.json is too big creating a new list
 - [ ] guI windows for select directory of songs
+- [ ] import simpleaudio as sa  stop the songs abrutply use fadeout

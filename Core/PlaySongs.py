@@ -1,84 +1,80 @@
 import asyncio
-
 from Core.AudioProcessing import PlayAsync, CalculateTransition
 from FileHandling import UpdateJsonWithSong
-from Utilities import GetModLength
 from Core.CreateListOfSongs import GetPreviousSessionSongs, CreateNewListOfSongs
 from Logging.MainLogger import mainLogger
-from threading import Event
-import time
 
-async def AwaitTimeoutOrEvent(stopEvent,timeout):
-    startTime = time.perf_counter()
-    endTime = startTime
-    while (endTime - startTime) < timeout:
-        if stopEvent.is_set():
-            break
-        await asyncio.sleep(0.1)
-        endTime = time.perf_counter()
+async def PlayAsyncAlt(songList,waitToStart, fireNextSong,stopEvent,initialIdx,resumePosition=0):
+    nextSongIdx=(initialIdx+1) 
+    songListCount = len(songList)
+    while nextSongIdx < songListCount:
+        await waitToStart.wait()
+        waitToStart.clear()  
 
-async def WaitForTasksToFinish(tasks):
-    await asyncio.gather(*(task for task in tasks if task))
+        songPath = songList[initialIdx]
+        nextSongPath = songList[nextSongIdx]
+        songName = songPath.split('/')[-1]
 
-async def PlaySongs(resume=None,stopEvent=None):
-    mainLogger.info(" starting ")
-    leftDeckTask = None
-    rightDeckTask = None
-    Tasks = [leftDeckTask,rightDeckTask]
-    leftCrossfade = 0
-    rightCrossfade = 0
-    iterationStep = 2
+        delay = CalculateTransition(songPath,nextSongPath)
+        if initialIdx==0 and resumePosition!=0:
+            delay-=resumePosition
 
-    try:
-        songsList = None
-        resumePosition = 0
+        mainLogger.info(f"Playing {songName}")
+        UpdateJsonWithSong(songPath)
+        deckTask = asyncio.create_task(PlayAsync(songPath,delay,stopEvent,resumePosition))
+        await asyncio.sleep(delay)  
 
-        if resume:
-            subsetList,resumePosition = GetPreviousSessionSongs()
-            songsList = subsetList
-        else: 
-            songsList = CreateNewListOfSongs()
+        fireNextSong.set()
+        initialIdx+=2
+        nextSongIdx=(initialIdx+1)
+        try:
+            result = await deckTask
+            if not result:
+                raise asyncio.CancelledError
+        except asyncio.CancelledError:
+            deckTask.cancel()
 
-        for iter in range(0, GetModLength(songsList), iterationStep):
-            if stopEvent.is_set():
-                break
-            leftDeckIdx=iter
-            rightDeckIdx=iter+1
-            rightDeckOverlapIdx=iter+2
-            if rightDeckOverlapIdx==len(songsList): 
-                break
+async def PlaySongsAlt(resume,cancel_event):
+    if not isinstance(cancel_event, asyncio.Event):
+        mainLogger.error("Only asyncio.Event allowed")
+        return
 
-            leftSongPath = songsList[leftDeckIdx]
-            rightSongPath = songsList[rightDeckIdx]
+    resumePosition = 0
 
-            mainLogger.info("playing: " + leftSongPath.split('/')[-1])
-            UpdateJsonWithSong(leftSongPath)
-            leftDelay = CalculateTransition(leftSongPath,rightSongPath)
-            leftDeckTask = asyncio.create_task(PlayAsync(leftSongPath,leftDelay,stopEvent,resumePosition))
-  
-            if rightDeckTask: 
-                await rightDeckTask
-            if resumePosition != 0:
-                leftDelay-=resumePosition
-                resumePosition = 0
+    if resume:
+        subsetList,resumePosition = GetPreviousSessionSongs()
+        songsList = subsetList
+    else: 
+        songsList = CreateNewListOfSongs()
 
-            await AwaitTimeoutOrEvent(stopEvent,leftDelay-rightCrossfade)
+    leftDeckEvent = asyncio.Event()
+    rightDeckEvent = asyncio.Event()
+    leftDeckEvent.set()
 
-            if stopEvent.is_set():
-                break
-            mainLogger.info("playing: " + rightSongPath.split('/')[-1])
-            UpdateJsonWithSong(rightSongPath)
-            rightDelay = CalculateTransition(rightSongPath,songsList[rightDeckOverlapIdx])
-            rightDeckTask = asyncio.create_task(PlayAsync(rightSongPath,rightDelay,stopEvent))
+    leftDeckInitialIdx=0
+    rightDeckInitialIdx=1
 
-            if leftDeckTask:
-                await leftDeckTask
+    mainLogger.info(f"Starting...")
+    leftDeckTask = asyncio.create_task(PlayAsyncAlt(songsList,leftDeckEvent,\
+                                        rightDeckEvent,cancel_event,leftDeckInitialIdx,resumePosition))
+    rightDeckTask = asyncio.create_task(PlayAsyncAlt(songsList,rightDeckEvent,\
+                                        leftDeckEvent,cancel_event,rightDeckInitialIdx))
+    cancel_task = asyncio.create_task(cancel_event.wait())
 
-            await AwaitTimeoutOrEvent(stopEvent,rightDelay-leftCrossfade)
+    done, pending = await asyncio.wait(
+        [leftDeckTask,rightDeckTask,cancel_task],
+        return_when=asyncio.FIRST_COMPLETED  
+    )
 
-        await WaitForTasksToFinish(Tasks)
+    for future in done:
+        if future.done():
+            try:
+                result = await future  # This retrieves the result if it's not an event wait
+                if not result:
+                    raise ValueError("Task was not completed")
+            except asyncio.CancelledError:
+                print("Task was cancelled.")
 
-    except Exception as e:
-
-        await WaitForTasksToFinish(Tasks)
-        print("Caught an exception:", str(e))
+    for future in pending:
+        future.cancel()
+        print("Canceled pending task")

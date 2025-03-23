@@ -3,12 +3,12 @@ from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6.QtCore import QUrl
 
 import asyncio
-from Core.PlaySongs import PlaySongs
+from Core.PlaySongs import PlaySongsAlt
 import threading
 from threading import Event
 
 def RunAsyncInThread(resume=None,stopEvent=None):
-    asyncio.run(PlaySongs(resume,stopEvent))
+    asyncio.run(PlaySongsAlt(resume,stopEvent))
 
 class AudioPlayer(QWidget):
     def __init__(self):
@@ -39,7 +39,7 @@ class AudioPlayer(QWidget):
         self.setWindowTitle('Simple Audio Player')
         self.setGeometry(300, 300, 300, 200)
 
-        self.stopPlayer = Event()
+        self.stopPlayer = asyncio.Event()
         self.playThread = None
         self.resume=None
 
@@ -61,8 +61,9 @@ class AudioPlayer(QWidget):
         print("pausing...")
         #self.player.pause()
         self.stopPlayer.set()
-        self.playThread.join()
-        self.playThread = None
+        if self.playThread!=None:
+            self.playThread.join()
+            self.playThread = None
         self.resume=True
         print("paused")
 
@@ -70,8 +71,9 @@ class AudioPlayer(QWidget):
         print("stopping...")
         #self.player.stop()
         self.stopPlayer.set()
-        self.playThread.join()
-        self.playThread = None
+        if self.playThread!=None:
+            self.playThread.join()
+            self.playThread = None
         self.resume=True
         print("stopped")
 
