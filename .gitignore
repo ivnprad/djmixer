@@ -5,3 +5,8 @@ Logging/__pycache__
 Core/__pycache__
 ConfigurationFiles
 *.log.*
+itmconf_icacc2022_03016.pdf
+music_generation.ipynb
+simple_audio.ipynb
+mlclassifier/Data/
+mlclassifier/archive.zip
