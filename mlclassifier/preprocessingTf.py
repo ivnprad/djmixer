@@ -9,6 +9,87 @@ import librosa
 import AudioProcessor
 DATASET_PATH = pathlib.Path.cwd()/'Data'/'genres_original'
 
+import os
+import tensorflow as tf
+
+def load_data(datadir, fs=22050, 
+              batch_size=64, 
+              validation_split=0.2, 
+              seed=42,
+              chunk_duration_seconds=None):
+    """
+    Loads audio data from directory in a manner similar to tf.keras.utils.audio_dataset_from_directory.
+    
+    Args:
+        datadir: A pathlib.Path object or string path to the root data directory. 
+                 Assumes that subdirectories are class names and contain .wav files.
+        fs: Desired sampling rate.
+        batch_size: Batch size.
+        validation_split: Fraction of data to use for validation.
+        seed: Random seed.
+        chunk_duration_seconds: If provided, the audio will be chunked into pieces of this duration (in seconds).
+        
+    Returns:
+        A tuple (train_ds, val_ds) of tf.data.Dataset objects.
+    """
+    # Create a pattern to match all .wav files in subdirectories.
+    file_pattern = os.path.join(str(datadir), "*", "*.wav")
+    files_ds = tf.data.Dataset.list_files(file_pattern, seed=seed)
+    
+    def decode_and_extract_label(filepath):
+        # Read file contents.
+        audio_binary = tf.io.read_file(filepath)
+        # Decode the WAV file.
+        waveform, sample_rate = tf.audio.decode_wav(audio_binary, desired_channels=1)
+        waveform = tf.squeeze(waveform, axis=-1)
+        # Optionally, if the file's sample rate isn't fs, you might want to resample.
+        # For now, we assume that the file's sample rate is already fs.
+        
+        # Optionally chunk the waveform into segments of fixed duration.
+        if chunk_duration_seconds is not None:
+            chunk_samples = fs * chunk_duration_seconds
+            # If the waveform is shorter than the desired chunk length, pad it.
+            waveform = tf.pad(waveform, [[0, tf.maximum(0, chunk_samples - tf.shape(waveform)[0])]])
+            # Frame into non-overlapping chunks.
+            waveform = tf.signal.frame(waveform, frame_length=chunk_samples, frame_step=chunk_samples)
+            # The waveform now has shape (num_chunks, chunk_samples)
+        # Else, keep the full waveform.
+        
+        # Extract the label from the file path (assumes folder name is the label)
+        parts = tf.strings.split(filepath, os.sep)
+        label = parts[-2]
+        return waveform, label
+
+    # Map the decoding function over the files dataset.
+    ds = files_ds.map(decode_and_extract_label, num_parallel_calls=tf.data.AUTOTUNE)
+    
+    # If chunking was applied, the waveform shape will be (num_chunks, chunk_samples).
+    # To flatten out the chunks so that each one is an individual sample, use flat_map.
+    if chunk_duration_seconds is not None:
+        ds = ds.flat_map(
+            lambda waveform, label: tf.data.Dataset.from_tensor_slices((waveform, tf.repeat(label, tf.shape(waveform)[0])))
+        )
+    
+    # Cache for performance and shuffle the entire dataset.
+    ds = ds.cache().shuffle(buffer_size=1000, seed=seed)
+    
+    # Compute the cardinality (number of samples).
+    num_samples = tf.data.experimental.cardinality(ds).numpy()
+    if num_samples <= 0:
+        raise ValueError("No audio samples found.")
+    
+    num_val = int(validation_split * num_samples)
+    
+    # Split into validation and training datasets.
+    val_ds = ds.take(num_val)
+    train_ds = ds.skip(num_val)
+    
+    # Batch and prefetch both datasets.
+    train_ds = train_ds.batch(batch_size).prefetch(tf.data.AUTOTUNE)
+    val_ds = val_ds.batch(batch_size).prefetch(tf.data.AUTOTUNE)
+    
+    return train_ds, val_ds
+
 
 def GetSpectrogram(waveform):
     #spectrogram = AudioProcessor.CoreGetSpecrogramTf(waveform)
@@ -167,7 +248,18 @@ if __name__ == "__main__":
     tf.random.set_seed(seed)
     np.random.seed(seed)
 
-    DATASET_PATH = pathlib.Path.cwd()/'Data'/'genres_original'
+    #DATASET_PATH = pathlib.Path.cwd()/'Data'/'genres_original'
+    DATASET_PATH = pathlib.Path.cwd()/'mlclassifier'/'Data'/'genres_original'
+    train_chunk_ds = AudioProcessor.build_chunked_dataset(DATASET_PATH)
+    label_names = np.array(train_chunk_ds.class_names)
+    
+    print("label names:", label_names)
+
+    num_batches = tf.data.experimental.cardinality(train_chunk_ds).numpy()
+    print(f"train_spectrogram_ds has {num_batches} batches")
+
+    print(train_chunk_ds.element_spec)
+
     train_ds, val_ds=LoadData(DATASET_PATH)
     label_names = np.array(train_ds.class_names)
     print()
@@ -247,26 +339,57 @@ if __name__ == "__main__":
     norm_layer = tf.keras.layers.Normalization()
     norm_layer.adapt(data=train_spectrogram_ds.map(map_func=lambda spec, label: spec))
 
+
+    # model = tf.keras.models.Sequential([
+    #     tf.keras.layers.Input(shape=input_shape),
+    #     # Downsample the input.
+    #     tf.keras.layers.Resizing(32, 32),
+
+    #     tf.keras.layers.RandomFlip("horizontal"),
+    #     tf.keras.layers.RandomRotation(0.4),
+    #     tf.keras.layers.RandomTranslation(0.2,0.2),
+    #     tf.keras.layers.RandomContrast(0.4),
+    #     tf.keras.layers.RandomZoom(0.2),
+    #     # Normalize.
+    #     norm_layer,
+    #     tf.keras.layers.Conv2D(32, 3, activation='relu'),
+    #     tf.keras.layers.Conv2D(64, 3, activation='relu'),
+    #     tf.keras.layers.MaxPooling2D(),
+    #     tf.keras.layers.Dropout(0.25),
+    #     tf.keras.layers.Flatten(),
+    #     tf.keras.layers.Dense(128, activation='relu'),
+    #     tf.keras.layers.Dropout(0.5),
+    #     tf.keras.layers.Dense(num_labels),
+    # ])
+
     model = tf.keras.models.Sequential([
         tf.keras.layers.Input(shape=input_shape),
         tf.keras.layers.Resizing(32, 32),
 
+        # Lighten augmentations
         tf.keras.layers.RandomFlip("horizontal"),
-        tf.keras.layers.RandomRotation(0.4),
-        tf.keras.layers.RandomTranslation(0.2,0.2),
-        tf.keras.layers.RandomContrast(0.4),
-        tf.keras.layers.RandomZoom(0.2),
+        tf.keras.layers.RandomRotation(0.1),
+        tf.keras.layers.RandomTranslation(0.1, 0.1),
+        tf.keras.layers.RandomContrast(0.1),
+        tf.keras.layers.RandomZoom(0.1),
 
         norm_layer,
+
+        # Deepen model
         tf.keras.layers.Conv2D(32, 3, activation='relu'),
         tf.keras.layers.Conv2D(64, 3, activation='relu'),
         tf.keras.layers.MaxPooling2D(),
-        tf.keras.layers.Dropout(0.25),
+
+        tf.keras.layers.Conv2D(128, 3, activation='relu'),
+        tf.keras.layers.MaxPooling2D(),
+
+        tf.keras.layers.Dropout(0.3),
         tf.keras.layers.Flatten(),
-        tf.keras.layers.Dense(128, activation='relu'),
+        tf.keras.layers.Dense(256, activation='relu'),
         tf.keras.layers.Dropout(0.5),
         tf.keras.layers.Dense(num_labels),
     ])
+
 
     model.summary()
 

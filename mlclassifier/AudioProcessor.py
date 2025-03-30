@@ -361,26 +361,74 @@ def CoreGetSpecrogramTf(waveform, sample_rate=22050):
 # import tensorflow as tf
 # import os
 
-def load_and_chunk_wav(filepath, label, fs=22050, chunk_seconds=3):
-    audio_binary = tf.io.read_file(filepath)
-    waveform, _ = tf.audio.decode_wav(audio_binary)
-    waveform = tf.squeeze(waveform, axis=-1)
+# def load_and_chunk_wav(filepath, label, fs=22050, chunk_seconds=3):
+#     audio_binary = tf.io.read_file(filepath)
+#     waveform, _ = tf.audio.decode_wav(audio_binary)
+#     waveform = tf.squeeze(waveform, axis=-1)
 
-    total_samples = fs * 30
+#     total_samples = fs * 30
+#     chunk_size = fs * chunk_seconds
+#     num_chunks = total_samples // chunk_size
+
+#     waveform = waveform[:total_samples]  # Trim or pad to 30s
+#     chunks = tf.reshape(waveform, (num_chunks, chunk_size))  # shape: (10, 66150)
+
+#     labels = tf.repeat(label, repeats=num_chunks)
+
+#     return chunks, labels
+
+# def flatten_chunks(waveform_chunks, labels):
+#     return tf.data.Dataset.from_tensor_slices((waveform_chunks, labels))
+
+# def build_chunked_dataset(data_dir, fs=22050, chunk_seconds=3, batch_size=64):
+#     class_names = sorted([
+#         d for d in os.listdir(data_dir) if os.path.isdir(os.path.join(data_dir, d))
+#     ])
+#     class_to_index = {name: i for i, name in enumerate(class_names)}
+
+#     filepaths = []
+#     labels = []
+#     for class_name in class_names:
+#         class_dir = os.path.join(data_dir, class_name)
+#         for fname in os.listdir(class_dir):
+#             if fname.endswith('.wav'):
+#                 filepaths.append(os.path.join(class_dir, fname))
+#                 labels.append(class_to_index[class_name])
+
+#     ds = tf.data.Dataset.from_tensor_slices((filepaths, labels))
+
+#     # Apply slicing and flattening
+#     ds = ds.map(lambda path, label: load_and_chunk_wav(path, label, fs, chunk_seconds),
+#                 num_parallel_calls=tf.data.AUTOTUNE)
+    
+#     # Flatten (chunk tensor, label) -> individual chunk-label pairs
+#     ds = ds.flat_map(flatten_chunks)
+
+#     ds = ds.batch(batch_size).prefetch(tf.data.AUTOTUNE)
+
+#     ds.class_names = class_names 
+
+#     return ds
+
+
+def load_and_chunk_wav(path, label, fs, chunk_seconds):
+    audio = tf.io.read_file(path)
+    audio, _ = tf.audio.decode_wav(audio)
+    audio = tf.squeeze(audio, axis=-1)  # Shape: [samples]
+
     chunk_size = fs * chunk_seconds
-    num_chunks = total_samples // chunk_size
+    total_chunks = tf.shape(audio)[0] // chunk_size
+    trimmed_length = total_chunks * chunk_size
+    audio = audio[:trimmed_length]  # Trim to multiple of chunk_size
+    audio = tf.reshape(audio, (total_chunks, chunk_size))  # Shape: [chunks, chunk_size]
 
-    waveform = waveform[:total_samples]  # Trim or pad to 30s
-    chunks = tf.reshape(waveform, (num_chunks, chunk_size))  # shape: (10, 66150)
-
-    labels = tf.repeat(label, repeats=num_chunks)
-
-    return chunks, labels
-
-def flatten_chunks(waveform_chunks, labels):
-    return tf.data.Dataset.from_tensor_slices((waveform_chunks, labels))
+    labels = tf.fill([total_chunks], label)  # Shape: [chunks]
+    
+    return tf.data.Dataset.from_tensor_slices((audio, labels))
 
 def build_chunked_dataset(data_dir, fs=22050, chunk_seconds=3, batch_size=64):
+    import types
+
     class_names = sorted([
         d for d in os.listdir(data_dir) if os.path.isdir(os.path.join(data_dir, d))
     ])
@@ -397,11 +445,39 @@ def build_chunked_dataset(data_dir, fs=22050, chunk_seconds=3, batch_size=64):
 
     ds = tf.data.Dataset.from_tensor_slices((filepaths, labels))
 
-    # Apply slicing and flattening
-    ds = ds.map(lambda path, label: load_and_chunk_wav(path, label, fs, chunk_seconds),
-                num_parallel_calls=tf.data.AUTOTUNE)
+    # Each map returns a dataset (chunked), so flat_map merges them
+    ds = ds.flat_map(lambda path, label: load_and_chunk_wav(path, label, fs, chunk_seconds))
     
-    # Flatten (chunk tensor, label) -> individual chunk-label pairs
-    ds = ds.flat_map(flatten_chunks)
+    ds = ds.batch(batch_size).prefetch(tf.data.AUTOTUNE)
 
-    return ds.batch(batch_size).prefetch(tf.data.AUTOTUNE)
+    # Attach class names attribute
+    ds.class_names = class_names
+
+    return ds
+
+# all_chunks = []
+# all_labels = []
+
+# for path, label in zip(filepaths, labels):
+#     audio = tf.io.read_file(path)
+#     audio, _ = tf.audio.decode_wav(audio)
+#     audio = tf.squeeze(audio, axis=-1)
+#     chunk_size = fs * chunk_seconds
+#     total_chunks = audio.shape[0] // chunk_size
+#     audio = audio[:total_chunks * chunk_size]
+#     chunks = tf.reshape(audio, (total_chunks, chunk_size))
+
+#     all_chunks.extend(chunks.numpy())
+#     all_labels.extend([label] * total_chunks)
+
+# ds = tf.data.Dataset.from_tensor_slices((all_chunks, all_labels))
+# ds = ds.shuffle(1024).batch(batch_size).prefetch(tf.data.AUTOTUNE)
+
+# card = tf.data.experimental.cardinality(ds).numpy()
+# if card < 0:
+#     ds_len = sum(1 for _ in ds)
+#     steps_per_epoch = ds_len // batch_size
+#     ds = ds.batch(batch_size).prefetch(tf.data.AUTOTUNE)
+#     model.fit(ds, epochs=10, steps_per_epoch=steps_per_epoch)
+# else:
+#     model.fit(ds, epochs=10)
