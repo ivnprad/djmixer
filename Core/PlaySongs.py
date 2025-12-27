@@ -34,7 +34,7 @@ async def PlayAsyncAlt(songList,waitToStart, fireNextSong,stopEvent,initialIdx,r
         except asyncio.CancelledError:
             deckTask.cancel()
 
-async def PlaySongsAlt(resume,cancel_event):
+async def PlaySongsAlt(resume,cancel_event: asyncio.Event):
     if not isinstance(cancel_event, asyncio.Event):
         mainLogger.error("Only asyncio.Event allowed")
         return

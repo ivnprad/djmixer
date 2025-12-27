@@ -1,11 +1,13 @@
 from PyQt6.QtWidgets import QApplication, QWidget, QPushButton, QVBoxLayout, QFileDialog,QMessageBox
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6.QtCore import QUrl
+from PyQt6.QtCore import QTimer
+from PyQt6.QtWidgets import QLabel
 
 import asyncio
 from Core.PlaySongs import PlaySongsAlt
 import threading
-from threading import Event
+import queue
 
 def RunAsyncInThread(resume=None,stopEvent=None):
     asyncio.run(PlaySongsAlt(resume,stopEvent))
@@ -14,16 +16,14 @@ class AudioPlayer(QWidget):
     def __init__(self):
         super().__init__()
         self.init_ui()
-        self.player = QMediaPlayer()
-        self.audio_output = QAudioOutput()
-        self.player.setAudioOutput(self.audio_output)
-        #self.playlist = QMediaPlaylist()
+        self.data_queue = queue.Queue()
 
     def init_ui(self):
         self.load_button = QPushButton('Load', self)
         self.play_button = QPushButton('Play', self)
         self.pause_button = QPushButton('Pause', self)
         self.stop_button = QPushButton('Stop', self)
+        self.label = QLabel("Waiting for data...")
 
         self.load_button.clicked.connect(self.load_file)
         self.play_button.clicked.connect(self.play_audio)
@@ -35,32 +35,33 @@ class AudioPlayer(QWidget):
         layout.addWidget(self.play_button)
         layout.addWidget(self.pause_button)
         layout.addWidget(self.stop_button)
+        layout.addWidget(self.label)
 
         self.setWindowTitle('Simple Audio Player')
         self.setGeometry(300, 300, 300, 200)
 
-        self.stopPlayer = asyncio.Event()
+        self.stopPlayer = None
         self.playThread = None
         self.resume=None
 
+        # Poll the queue every 100ms
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.poll_queue)
+        self.timer.start(100)
+
     def load_file(self):
         path, _ = QFileDialog.getOpenFileName(self, "Open file", "", "MP3 files (*.mp3);;All files (*)")
-        if path:
-            self.playlist.clear()
-            #self.playlist.addMedia(QMediaContent(QUrl.fromLocalFile(path)))
-            self.player.setPlaylist(self.playlist)
 
     def play_audio(self):
-        #self.player.play()
-        self.stopPlayer.clear()
+        self.stopPlayer = asyncio.Event()
         self.playThread = threading.Thread(target=RunAsyncInThread, args=(self.resume,self.stopPlayer))
         self.playThread.start()
         print("playing...")
 
     def pause_audio(self):
         print("pausing...")
-        #self.player.pause()
-        self.stopPlayer.set()
+        if self.stopPlayer!=None:
+            self.stopPlayer.set()
         if self.playThread!=None:
             self.playThread.join()
             self.playThread = None
@@ -69,8 +70,8 @@ class AudioPlayer(QWidget):
 
     def stop_audio(self):
         print("stopping...")
-        #self.player.stop()
-        self.stopPlayer.set()
+        if self.stopPlayer!=None:
+            self.stopPlayer.set()
         if self.playThread!=None:
             self.playThread.join()
             self.playThread = None
@@ -83,13 +84,18 @@ class AudioPlayer(QWidget):
             QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
 
         if reply == QMessageBox.StandardButton.Yes:
-            #self.player.stop()  # Stop the player
-            self.stopPlayer.set()
-            if self.playThread!=None:
-                self.playThread.join()
+            self.stop_audio()
             event.accept()
         else:
             event.ignore()  
+
+    def poll_queue(self):
+        try:
+            while True:
+                data = self.data_queue.get_nowait()
+                self.label.setText(data)
+        except queue.Empty:
+            pass
 
 if __name__ == '__main__':
     app = QApplication([])
