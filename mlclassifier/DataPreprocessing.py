@@ -12,8 +12,8 @@ import AudioProcessor
 
 from pathlib import Path
 
-#path_data=Path.cwd()/'mlclassifier'/'Data'/'genres_original'
-path_data=Path.cwd()/'Data'/'genres_original'
+path_data=Path.cwd()/'mlclassifier'/'Data'/'genres_original'
+#path_data=Path.cwd()/'Data'/'genres_original'
 genrePath=path_data/'blues'
 filename = 'blues.00000.wav'
 file_path = genrePath/filename
